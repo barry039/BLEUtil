@@ -8,6 +8,10 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanResult;
+import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.os.Build;
 import android.os.Handler;
@@ -114,8 +118,18 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
-                        btAdapter.startLeScan(BLEUtil.this);
-                        isScanning = true;
+                        if (android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.N) {
+                            // only for gingerbread and newer versions
+                            final ScanSettings mScanSettings = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).setReportDelay(0).build();
+                            ScanFilter.Builder builder = new ScanFilter.Builder();
+                            final ScanFilter filter = builder.build();
+                            List<ScanFilter> filters = new ArrayList<>();
+                            filters.add(filter);
+                            btAdapter.getBluetoothLeScanner().startScan(filters,mScanSettings,mBLEScan);
+                        }else
+                        {
+                            btAdapter.startLeScan(BLEUtil.this);
+                        }                        isScanning = true;
                     }
                 });
 
@@ -140,6 +154,27 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
             }
         }
     }
+
+    private ScanCallback mBLEScan = new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            super.onScanResult(callbackType, result);
+            final BluetoothDevice bluetoothDevice = result.getDevice();
+            final int rs = result.getRssi();
+            final byte[] raw_data = result.getScanRecord().getBytes();
+            parseScanRecord(raw_data);
+            if(bluetoothDevice.getName() != null)
+            {
+                if(!isContain(bluetoothDevice.getAddress(),rs,raw_data))
+                {
+
+                    bluetoothDeviceInfoDataList.add(new BluetoothDeviceInfoData(bluetoothDevice,rs,raw_data));
+                }
+            }
+            scanDeviceCallBack.ScanResult(bluetoothDeviceInfoDataList);
+        }
+
+    };
 
     private List<BluetoothDevice> bluetoothDeviceList = new ArrayList<>();
     private List<BluetoothDeviceInfoData> bluetoothDeviceInfoDataList = new ArrayList<>();
