@@ -70,4 +70,5 @@ Log.d("data", byteTohex(data));
 
 ```
 
++ if scan time over 60s, it need to restart scan.
 
