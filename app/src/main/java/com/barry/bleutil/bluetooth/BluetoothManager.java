@@ -1,4 +1,4 @@
-package com.barry.bleutil;
+package com.barry.bleutil.bluetooth;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -7,7 +7,6 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
-import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
@@ -18,15 +17,16 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.barry.bleutil.BluetoothDeviceInfoData;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import static android.bluetooth.BluetoothGatt.GATT_SUCCESS;
-import static com.barry.bleutil.ConvertUtil.byteTohex;
-import static com.barry.bleutil.ConvertUtil.extractBytes;
+import static com.barry.bleutil.bluetooth.ConvertUtil.byteTohex;
+import static com.barry.bleutil.bluetooth.ConvertUtil.extractBytes;
 
-public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.LeScanCallback{
+public class BluetoothManager extends BluetoothGattCallback implements BluetoothAdapter.LeScanCallback{
 
     private Context context;
 
@@ -36,26 +36,42 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
 
     private BluetoothDevice connect_bluetoothDevice = null;
 
-    private BluetoothInterface.ReadDataCallBack readDataCallBack;
+    private BluetoothInterface.ConnectionCallback connectionCallback;
 
     private BluetoothInterface.ScanDeviceCallBack scanDeviceCallBack;
+
+    private BluetoothConfig bluetoothConfig;
 
     private String connectAddress = "";
 
     private boolean is_connect = false;
 
-    public BLEUtil(Context context, BluetoothInterface.ScanDeviceCallBack scanDeviceCallBack, BluetoothInterface.ReadDataCallBack readDataCallBack)
+    /*
+        ================================================
+        bluetooth init func
+        ================================================
+    */
+
+
+    public BluetoothManager(Context context, BluetoothInterface.ScanDeviceCallBack scanDeviceCallBack, BluetoothInterface.ConnectionCallback connectionCallback)
     {
+        bluetoothConfig = new BluetoothConfig();
         this.scanDeviceCallBack = scanDeviceCallBack;
-        this.readDataCallBack = readDataCallBack;
+        this.connectionCallback = connectionCallback;
         this.context = context;
         getBTAdapter();
     }
 
     public void getBTAdapter(){
-        BluetoothManager btManager = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+        android.bluetooth.BluetoothManager btManager = (android.bluetooth.BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
         btAdapter= (BluetoothAdapter) btManager.getAdapter();
     }
+
+    /*
+        ================================================
+        bluetooth scan func
+        ================================================
+    */
 
     private boolean isScanning = false;
 
@@ -86,6 +102,7 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
             }
         }
     }
+
     //間隔調用時間 避免bluetoothadapter instance調用失敗
     private void startBTAdapterIntervalTime()
     {
@@ -128,8 +145,9 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
                             btAdapter.getBluetoothLeScanner().startScan(filters,mScanSettings,mBLEScan);
                         }else
                         {
-                            btAdapter.startLeScan(BLEUtil.this);
-                        }                        isScanning = true;
+                            btAdapter.startLeScan(BluetoothManager.this);
+                        }
+                        isScanning = true;
                     }
                 });
 
@@ -147,7 +165,7 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
-                        btAdapter.stopLeScan(BLEUtil.this);
+                        btAdapter.stopLeScan(BluetoothManager.this);
                         isScanning = false;
                     }
                 });
@@ -212,6 +230,11 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
         return false;
     }
 
+    /*
+        ================================================
+        bluetooth connect func
+        ================================================
+    */
 
     public void connectDevice(BluetoothDevice bluetoothDevice)
     {
@@ -229,9 +252,9 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
             @Override
             public void run() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    bluetoothGatt = connect_bluetoothDevice.connectGatt(context, false, BLEUtil.this, BluetoothDevice.TRANSPORT_LE);
+                    bluetoothGatt = connect_bluetoothDevice.connectGatt(context, false, BluetoothManager.this, BluetoothDevice.TRANSPORT_LE);
                 } else {
-                    bluetoothGatt = connect_bluetoothDevice.connectGatt(context, false, BLEUtil.this);
+                    bluetoothGatt = connect_bluetoothDevice.connectGatt(context, false, BluetoothManager.this);
                 }
             }
         });
@@ -262,13 +285,17 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
                 is_connect = false;
                 bluetoothGatt.close();
                 bluetoothGatt = null;
-                readDataCallBack.onDisconnected(connect_bluetoothDevice);
+                connectionCallback.onDisconnected(connect_bluetoothDevice);
                 scanDevice(true);
             }
         }
     }
 
-
+    /*
+        ================================================
+        bluetooth gatt default callback func
+        ================================================
+    */
 
     @Override
     public void onConnectionStateChange(final BluetoothGatt gatt, int status, int newState) {
@@ -276,7 +303,7 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
         if(newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED)
         {
             scanDevice(false);
-            readDataCallBack.onConnected();
+            connectionCallback.onConnected();
             bluetoothGatt = gatt;
             connectAddress = gatt.getDevice().getAddress();
             is_connect = true;
@@ -295,7 +322,7 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
             is_connect = false;
             bluetoothGatt = null;
             connectAddress = "";
-            readDataCallBack.onDisconnected(connect_bluetoothDevice);
+            connectionCallback.onDisconnected(connect_bluetoothDevice);
         }
     }
 
@@ -347,22 +374,30 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
     @Override
     public void onServicesDiscovered(BluetoothGatt gatt, int status) {
         super.onServicesDiscovered(gatt, status);
-        if (status == GATT_SUCCESS) {
-            //Get service
-            List<BluetoothGattService> services = gatt.getServices();
-            for(BluetoothGattService bluetoothGattService :services)
-            {
-                Log.e("service",bluetoothGattService.getUuid().toString());
-                for(BluetoothGattCharacteristic characteristic : bluetoothGattService.getCharacteristics())
+        try {
+            if (status == GATT_SUCCESS) {
+                //Get service
+                List<BluetoothGattService> services = gatt.getServices();
+                for(BluetoothGattService bluetoothGattService :services)
                 {
-                    Log.e("characteristic",characteristic.getUuid().toString());
+                    Log.e("service",bluetoothGattService.getUuid().toString());
+                    for(BluetoothGattCharacteristic characteristic : bluetoothGattService.getCharacteristics())
+                    {
+                        Log.e("characteristic",characteristic.getUuid().toString());
+                    }
                 }
             }
-//            enableNotify();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
-    //parser ble broadcast data
+    /*
+        ================================================
+        parser ble peripheral broadcast data
+        ================================================
+    */
+
     private byte[] specific_data = null;
     private String localName = "";
     private int txPowerLevel = 0;
@@ -433,73 +468,74 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
         }
     }
 
-    public void sendData(byte[] data) {
-        if(bluetoothGatt != null)
-        {
-            BluetoothGattService service = bluetoothGatt.getService(UUID.fromString("0000fff0-xxxx-xxxx-xxxxx-xxxxxxxxxx"));
-            if(service != null)
-            {
-                final BluetoothGattCharacteristic characteristic = service.getCharacteristic(UUID.fromString("0000fff1-xxxx-xxxx-xxxx-xxxxxxxxx"));
-                if(characteristic != null)
-                {
+    /*
+        ================================================
+        write to peripheral with byte array
+        ================================================
+    */
 
-                    if(data != null)
+    public void sendData(byte[] data) {
+        if(data != null)
+        {
+            if(bluetoothGatt != null)
+            {
+                BluetoothGattService service = bluetoothGatt.getService(bluetoothConfig.getWrite_service());
+                if(service != null)
+                {
+                    final BluetoothGattCharacteristic characteristic = service.getCharacteristic(bluetoothConfig.getWrite_characteristic());
+                    if(characteristic != null)
                     {
-                        characteristic.setValue(data);
-                        new Handler(Looper.getMainLooper()).post(new Runnable() {
-                            @Override
-                            public void run() {
-                                bluetoothGatt.writeCharacteristic(characteristic);
-                            }
-                        });
-                        return;
+                            characteristic.setValue(data);
+                            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    bluetoothGatt.writeCharacteristic(characteristic);
+                                }
+                            });
+                            return;
                     }
                 }
             }
         }
-        //connection error, close connect.
+        // connection error, close connect.
         closeDevice();
     }
 
-//    public void enableNotify()
-//    {
-//        for(BluetoothDeviceUUID uuids : bluetoothDeviceUUIDS)
-//        {
-//            if(uuids.getService().toString().equals("0000fff0-0000-1000-8000-00805f9b34fb"))
-//            {
-//                BluetoothGattService service = bluetoothGatt.getService(uuids.getService());
-//                if(service != null)
-//                {
-//                    for(BluetoothDeviceUUID.CharacteristicInfoData c : uuids.getCharacteristicinfoData())
-//                    {
-//                        if(c.getCharacteristic().getUuid().toString().equals("0000fff4-0000-1000-8000-00805f9b34fb"))
-//                        {
-//                            BluetoothGattCharacteristic characteristic = service.getCharacteristic(c.getCharacteristic().getUuid());
-//                            if(characteristic != null)
-//                            {
-//                                BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-//                                        UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
-//                                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-//                                bluetoothGatt.writeDescriptor(descriptor);
-//                                bluetoothGatt.setCharacteristicNotification(characteristic,true);
-//
-//
-//                                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-//                                    @Override
-//                                    public void run() {
-//
-//                                        readDataCallBack.onServiceDiscovered(bluetoothDeviceUUIDS);
-//                                    }
-//                                },500);
-//                                return;
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//        closeDevice();
-//    }
+    /*
+        ================================================
+        write to peripheral with byte array
+        ================================================
+    */
+
+    // characteristic notify enable
+    public void enableNotify() {
+        try {
+            BluetoothGattService service = bluetoothGatt.getService(bluetoothConfig.getService());
+            if(service != null)
+            {
+                BluetoothGattCharacteristic characteristic = service.getCharacteristic(bluetoothConfig.getCharacteristic());
+                if(characteristic != null)
+                {
+                    BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
+                            bluetoothConfig.getDescriptor());
+                    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    bluetoothGatt.writeDescriptor(descriptor);
+                    bluetoothGatt.setCharacteristicNotification(characteristic,true);
+                    return;
+                }
+            }
+            // connection error, close connect.
+            closeDevice();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /*
+        ================================================
+        Callback Interface
+        ================================================
+    */
 
     public interface BluetoothInterface
     {
@@ -507,7 +543,7 @@ public class BLEUtil extends BluetoothGattCallback implements BluetoothAdapter.L
         {
             void ScanResult(List<BluetoothDeviceInfoData> bluetoothDeviceInfoDatas);
         }
-        interface ReadDataCallBack
+        interface ConnectionCallback
         {
             void onConnected();
             void onDisconnected(BluetoothDevice bluetoothDevice);

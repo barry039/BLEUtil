@@ -11,13 +11,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.widget.Toast;
+
+import com.barry.bleutil.bluetooth.BluetoothManager;
 
 import java.util.List;
 
@@ -26,7 +27,7 @@ public class MainActivity extends AppCompatActivity {
     public final int REQUEST_PERMISSION_LOCATION = 1001;
     public final int REQUEST_ENABLE_BT = 1002;
 
-    private BLEUtil bleUtil;
+    private BluetoothManager bluetoothManager;
 
     private RecyclerView recyclerView;
 
@@ -41,11 +42,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void init() {
-        bleUtil = new BLEUtil(getApplicationContext(),scanDeviceCallBack,readDataCallBack);
+        bluetoothManager = new BluetoothManager(getApplicationContext(),scanDeviceCallBack,connectionCallback);
         bleListAdapter = new BleListAdapter(this, new BleListAdapter.BLEClickListener() {
             @Override
             public void onClicked(BluetoothDeviceInfoData bluetoothDeviceInfoData) {
-                bleUtil.connectDevice(bluetoothDeviceInfoData.getBluetoothDevice());
+                bluetoothManager.connectDevice(bluetoothDeviceInfoData.getBluetoothDevice());
             }
         });
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -58,21 +59,21 @@ public class MainActivity extends AppCompatActivity {
         checkBLEPermission();
     }
 
-    private BLEUtil.BluetoothInterface.ReadDataCallBack readDataCallBack = new BLEUtil.BluetoothInterface.ReadDataCallBack() {
+    private BluetoothManager.BluetoothInterface.ConnectionCallback connectionCallback = new BluetoothManager.BluetoothInterface.ConnectionCallback() {
         @Override
         public void onConnected() {
-
+            // connected to ble peripheral
         }
 
         @Override
         public void onDisconnected(BluetoothDevice bluetoothDevice) {
-
+            // disconnected from ble peripheral
         }
     };
 
     private boolean update_enable = true;
 
-    private BLEUtil.BluetoothInterface.ScanDeviceCallBack scanDeviceCallBack = new BLEUtil.BluetoothInterface.ScanDeviceCallBack() {
+    private BluetoothManager.BluetoothInterface.ScanDeviceCallBack scanDeviceCallBack = new BluetoothManager.BluetoothInterface.ScanDeviceCallBack() {
         @Override
         public void ScanResult(List<BluetoothDeviceInfoData> bluetoothDeviceInfoDatas) {
             //scaned device
@@ -94,15 +95,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void startScan()
     {
-        bleUtil.scanDevice(true);
+        bluetoothManager.scanDevice(true);
     }
 
     private void stopScan()
     {
-        bleUtil.scanDevice(false);
+        bluetoothManager.scanDevice(false);
     }
 
-
+    /*
+        ============Permission==============
+    */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -155,11 +158,11 @@ public class MainActivity extends AppCompatActivity {
 
     /*
         ============Bluetooth Permission==============
-         */
+    */
     private void checkBLEPermission() {
         if (isBleSupported()) {
             // Ensures Bluetooth is enabled on the device
-            BluetoothManager btManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+            android.bluetooth.BluetoothManager btManager = (android.bluetooth.BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
             BluetoothAdapter btAdapter = btManager.getAdapter();
             if (btAdapter.isEnabled()) {
                 // Prompt for runtime permission
@@ -178,20 +181,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isBleSupported() {
+        return getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
+    }
+
     @Override
     protected void onStop() {
         super.onStop();
         stopScan();
     }
 
-    private boolean isBleSupported() {
-        return getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
-    }
-
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        bleUtil.closeDevice();
+        bluetoothManager.closeDevice();
     }
 }
