@@ -15,7 +15,7 @@ BluetoothManager 作為 App 與 Bluetooth Low Energy 裝置溝通橋梁，使其
 1. 傳入applicationcontext
 2. 傳入掃描結果及連線狀態 CallBack
 ```
-BLEUtil bleUtil = new BLEUtil(getApplicationContext(),scanDeviceCallBack,readDataCallBack);
+BluetoothManager bluetoothManager = new BluetoothManager(getApplicationContext(),scanDeviceCallBack,readDataCallBack);
 ```
 + 掃描裝置
 ```
